@@ -14,6 +14,8 @@ module RailsAiChallenges
       generate.test_framework :test_unit, fixture: false
     end
 
+    config.mission_control.jobs.http_basic_auth_enabled = false
+
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.1
 

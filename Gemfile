@@ -29,6 +29,8 @@ gem "jbuilder"
 gem "ruby_llm"
 gem "devise"
 gem "solid_cable"
+gem "solid_queue"
+gem "mission_control-jobs"
 
 # Use Redis adapter to run Action Cable in production
 # gem "redis", ">= 4.0.1"

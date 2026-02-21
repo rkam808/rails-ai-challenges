@@ -1,6 +1,6 @@
-require "open-uri"
+class CreateChatAssistantMessageJob < ApplicationJob
+  queue_as :default
 
-class MessagesController < ApplicationController
   SYSTEM_PROMPT = <<~PROMPT
     You are a Teaching Assistant.\n\nI am a student at the Le Wagon Web Development Bootcamp, learning how to code.\n\nHelp me break down my problem into small, actionable steps, without giving away solutions.\n\nAnswer concisely in Markdown."
 
@@ -11,29 +11,31 @@ class MessagesController < ApplicationController
 
   BATCH_NUMBER = 2061
 
-  def create
-    @chat = current_user.chats.find(params[:chat_id])
+  def perform(user_message)
+    @message = user_message
+    @chat = user_message.chat
     @challenge = @chat.challenge
-    @message = Message.new(message_params)
-    @message.chat = @chat
-    @message.role = "user"
+    @assistant_message = @chat.messages.create(role: "assistant", content: "")
 
-    if @message.save
-      CreateChatAssistantMessageJob.perform_later(@message)
-
-      respond_to do |format|
-        format.turbo_stream # renders `app/views/messages/create.turbo_stream.erb`
-        format.html { redirect_to chat_path(@chat) }
-      end
+    if @message.file.attached?
+      process_file(@message.file)
     else
-      respond_to do |format|
-        format.turbo_stream { render turbo_stream: turbo_stream.replace("new_message_container", partial: "messages/form", locals: { chat: @chat, message: @message }) }
-        format.html { render "chats/show", status: :unprocessable_entity }
-      end
+      send_question
+    end
+
+    @assistant_message.update(content: @response.content)
+    broadcast_replace(@assistant_message)
+
+    @chat.generate_title_from_first_message
+
+    if @chat.title_previously_changed?
+      Turbo::StreamsChannel.broadcast_update_to(@chat, target: "chat_title", content: @chat.title)
     end
   end
 
-  private
+  def broadcast_replace(message)
+    Turbo::StreamsChannel.broadcast_replace_to(@chat, target: dom_id(message), partial: "messages/message", locals: { message: message })
+  end
 
   def build_conversation_history
     @chat.messages.each do |message|
@@ -43,20 +45,12 @@ class MessagesController < ApplicationController
     end
   end
 
-  def broadcast_replace(message)
-    Turbo::StreamsChannel.broadcast_replace_to(@chat, target: helpers.dom_id(message), partial: "messages/message", locals: { message: message })
-  end
-
   def challenge_context
     "Here is the context of the challenge: #{@challenge.content}."
   end
 
   def instructions
     [SYSTEM_PROMPT, challenge_context, @challenge.system_prompt].compact.join("\n\n")
-  end
-
-  def message_params
-    params.require(:message).permit(:content, :file)
   end
 
   def process_file(file)

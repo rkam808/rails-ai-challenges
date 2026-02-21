@@ -5,4 +5,12 @@ class User < ApplicationRecord
          :recoverable, :rememberable, :validatable
 
   has_many :chats, dependent: :destroy
+
+  after_commit :async_update, on: [:create, :update]
+
+  private
+
+  def async_update
+    UpdateUserJob.perform_later(self)
+  end
 end

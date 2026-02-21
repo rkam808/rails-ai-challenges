@@ -1,7 +1,3 @@
-<% if @chat.title_previously_changed? %>
-  <%= turbo_stream.update "chat_title", @chat.title %>
-<% end %>
-
-<%= turbo_stream.update "new_message_container" do %>
+<%= turbo_stream.replace "new_message" do %>
   <%= render "messages/form", chat: @chat, message: Message.new %>
 <% end %>
